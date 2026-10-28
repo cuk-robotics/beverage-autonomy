@@ -1,4 +1,4 @@
-# Beverage SmolVLA
+# Beverage Autonomy
 
 SO-101 양팔 음료 제조 프로젝트의 **학습·평가·실물 추론 코드를 통합할 저장소**입니다.
 
@@ -9,7 +9,7 @@ SO-101 양팔 음료 제조 프로젝트의 **학습·평가·실물 추론 코�
 | 저장소 | 역할 |
 | --- | --- |
 | [smolvla-bimanual-manipulation](https://github.com/cuk-robotics/smolvla-bimanual-manipulation) | 데이터 수집 기준: 장치 설정, 보정 연결, 원격조작, 연습, 기록 및 수집 품질 확인 |
-| **beverage-smolvla** | 최종 통합 대상: 학습 설정, 정책 평가, 추론 실행, 실험 재현 및 결과 문서 |
+| **beverage-autonomy** | 최종 통합 대상: 학습 설정, 정책 평가, 추론 실행, 실험 재현 및 결과 문서 |
 | [.github](https://github.com/cuk-robotics/.github) | 조직 소개 및 공통 GitHub 구성 |
 
 기존 저장소에는 추론 코드와 학습 실행 도우미도 있습니다. 코드 이전 검증 전까지 기존 실행 경로를 유지하며, 이 문서는 기존 기능을 제거했다는 의미가 아닙니다.
