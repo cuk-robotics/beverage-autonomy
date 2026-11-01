@@ -1,0 +1,6 @@
+{
+  "range_file": "range.json",
+  "instructions_file": "instructions.json",
+  "hold_seconds": 2.0,
+  "max_gap_seconds": 0.2
+}
