@@ -1,0 +1,32 @@
+{
+  "joint_names": [
+    "left_shoulder_pan.pos",
+    "left_shoulder_lift.pos",
+    "left_elbow_flex.pos",
+    "left_wrist_flex.pos",
+    "left_wrist_roll.pos",
+    "left_gripper.pos",
+    "right_shoulder_pan.pos",
+    "right_shoulder_lift.pos",
+    "right_elbow_flex.pos",
+    "right_wrist_flex.pos",
+    "right_wrist_roll.pos",
+    "right_gripper.pos"
+  ],
+  "home": [
+    -5.7,
+    -101.0,
+    99.7,
+    56.7,
+    29.1,
+    0.9,
+    -0.2,
+    -100.9,
+    91.6,
+    68.1,
+    24.9,
+    1.6
+  ],
+  "units": "degrees for joints, 0-100 for grippers (SO follower defaults)",
+  "source": "median of the first frame of 209 training episodes (powder 105, water 54, stir 50), 2026-11-03"
+}

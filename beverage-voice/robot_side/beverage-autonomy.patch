@@ -1,0 +1,120 @@
+diff --git a/episode_end_detector/README.md b/episode_end_detector/README.md
+index 78a117f..10cb089 100644
+--- a/episode_end_detector/README.md
++++ b/episode_end_detector/README.md
+@@ -93,12 +93,12 @@ def on_joint_observation(joint_positions):
+   "range_file": "range.json",
+   "instructions_file": "instructions.json",
+   "hold_seconds": 2.0,
+-  "max_gap_seconds": 0.2
++  "max_gap_seconds": 1.0
+ }
+ ```
+ 
+ - `hold_seconds`: 종료 범위 안에서 연속 유지해야 하는 시간(초).
+-- `max_gap_seconds`: 연속 관측으로 인정하는 최대 간격(초). 초과하면 체류 시간을 초기화합니다.
++- `max_gap_seconds`: 연속 관측으로 인정하는 최대 간격(초). 초과하면 체류 시간을 초기화합니다. 동기 추론은 action 묶음마다 루프가 멈추므로 그 시간보다 길게 둡니다.
+ - 파일 경로는 설정 파일이 있는 폴더 기준입니다. 작업 디렉터리를 바꿔도 기본 설정을 읽을 수 있습니다.
+ - 다른 설정 파일은 `EpisodeEndDetector.load_config("path/to/config.json")`으로 지정합니다.
+ 
+@@ -131,7 +131,7 @@ first_instruction = detector.start_episode(["new first", "new second"])
+ 1. 시작 전에는 종료 판정을 하지 않습니다.
+ 2. 시작 후 처음으로 종료 범위를 벗어나면 판단을 활성화합니다. 시작 후 첫 관측이 범위 밖이면 즉시 활성화합니다.
+ 3. 관절 12개가 모두 각자의 종료 범위 안에 들어오면 시간을 측정합니다. 하한과 상한도 내부에 포함합니다.
+-4. 연속 2초 유지하면 단계 종료 이벤트를 한 번 반환합니다. 범위 이탈이나 0.2초를 초과하는 관측 공백은 체류 시간을 초기화합니다.
++4. 연속 2초 유지하면 단계 종료 이벤트를 한 번 반환합니다. 범위 이탈이나 1초를 초과하는 관측 공백은 체류 시간을 초기화합니다.
+ 5. 다음 지시어가 있으면 자동으로 최초 범위 이탈 대기로 전환합니다. 종료 자세에서 계속 대기하는 것만으로 다음 단계가 종료되지 않습니다.
+ 6. 목록이 끝나면 관측값 검증, 범위 비교, 시간 갱신을 중지합니다. `start_episode()`가 호출되면 첫 지시어부터 다시 시작합니다.
+ 
+@@ -176,6 +176,6 @@ python -m unittest discover -s tests -v
+ 
+ ## 제공 범위의 한계
+ 
+-`range.json`은 4개 음료 데이터셋의 159개 에피소드 마지막 관측값에서 관절별 2.5~97.5 백분위를 구하고 양쪽에 0.5의 여유폭을 적용한 공통 범위입니다. 원본 데이터 경로나 에피소드 목록은 포함하지 않습니다.
++`range.json`은 가루 3종 105회, 물 54회, 젓기 50회, 합쳐 209개 에피소드의 첫·마지막 관측값 418개에서 관절별 2.5~97.5 백분위를 구하고 양쪽에 폭의 25%와 2도 중 큰 값을 여유로 더한 공통 범위입니다. 이전 범위(가루·물 159회 마지막 관측)는 젓기 종료 자세를 하나도 포함하지 못했습니다. 원본 데이터 경로나 에피소드 목록은 포함하지 않습니다.
+ 
+ 현재 범위와 2초 조건으로 홀드아웃 32개 에피소드를 재생했을 때 종료 검출은 0건이었습니다. 종료 자세로 돌아왔는지를 판단하는 모듈이며 실제 작업 성공을 직접 검증하지 않습니다. 적용 환경에서 범위와 유지 조건의 적합성을 확인해야 합니다.
+diff --git a/episode_end_detector/config.json b/episode_end_detector/config.json
+index 949b85e..a37d0ca 100644
+--- a/episode_end_detector/config.json
++++ b/episode_end_detector/config.json
+@@ -2,5 +2,5 @@
+   "range_file": "range.json",
+   "instructions_file": "instructions.json",
+   "hold_seconds": 2.0,
+-  "max_gap_seconds": 0.2
++  "max_gap_seconds": 1.0
+ }
+diff --git a/episode_end_detector/range.json b/episode_end_detector/range.json
+index cdf46f7..ee6c53a 100644
+--- a/episode_end_detector/range.json
++++ b/episode_end_detector/range.json
+@@ -16,31 +16,31 @@
+     "right_gripper.pos"
+   ],
+   "lower": [
+-    -16.236263275146484,
+-    -102.26263542175293,
+-    96.55055122375488,
+-    51.623076629638675,
+-    21.293406009674072,
+-    -0.13392311334609985,
+-    -5.348351836204529,
+-    -101.46703338623047,
+-    89.74176025390625,
+-    57.117582130432126,
+-    19.324174880981445,
+-    0.5155720710754395
++    -17.98,
++    -103.85,
++    95.09,
++    48.56,
++    14.34,
++    -1.39,
++    -7.21,
++    -102.97,
++    88.24,
++    55.29,
++    6.96,
++    -1.56
+   ],
+   "upper": [
+-    -0.2824175953865081,
+-    -99.93955993652344,
+-    101.5988998413086,
+-    70.74615592956543,
+-    48.61428737640372,
+-    5.10036623477935,
+-    3.845054984092711,
+-    -99.85164642333984,
+-    92.93955993652344,
+-    71.14175529479981,
+-    28.987911605834945,
+-    11.495260667800894
++    0.46,
++    -95.27,
++    103.1,
++    72.0,
++    53.47,
++    6.58,
++    5.98,
++    -98.44,
++    94.44,
++    73.81,
++    44.06,
++    13.07
+   ]
+ }
+diff --git a/episode_end_detector/tests/test_detector.py b/episode_end_detector/tests/test_detector.py
+index 450ba99..300d4d2 100644
+--- a/episode_end_detector/tests/test_detector.py
++++ b/episode_end_detector/tests/test_detector.py
+@@ -21,7 +21,7 @@ class DetectorTests(unittest.TestCase):
+     def test_config_and_bundled_files(self):
+         detector = EpisodeEndDetector.load_config()
+         self.assertEqual(detector.hold_seconds, 2.)
+-        self.assertEqual(detector.max_gap_seconds, .2)
++        self.assertEqual(detector.max_gap_seconds, 1.)
+         self.assertEqual(len(detector.names), 12)
+         self.assertEqual(len(detector.instructions), 3)
+ 

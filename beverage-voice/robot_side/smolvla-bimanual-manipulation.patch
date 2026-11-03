@@ -1,0 +1,645 @@
+diff --git a/README.md b/README.md
+index 4f136ee..d99e709 100644
+--- a/README.md
++++ b/README.md
+@@ -29,7 +29,7 @@ python scripts/run_robot.py record --validate-only
+ | `preview` | 모터 연결 없이 카메라 표시 |
+ | `infer` | 기존 정책을 공식 rollout으로 실행 |
+ 
+-진입점은 `scripts/run_robot.py`, 구현은 `src/cuk_robotics/`입니다. `--validate-only` 없는 operation·practice·record·infer는 실제 모터를 구동합니다. 기본 기록은 로컬 전용이며 Hub 업로드는 명시적으로 요청할 때만 수행합니다.
++진입점은 `scripts/run_robot.py`, 구현은 `src/cuk_robotics/`입니다. `--validate-only` 없는 operation·practice·record·infer·home은 실제 모터를 구동합니다. 기본 기록은 로컬 전용이며 Hub 업로드는 명시적으로 요청할 때만 수행합니다.
+ 
+ ## 문서 찾기
+ 
+diff --git a/docs/inference.md b/docs/inference.md
+index 1781c0a..c428933 100644
+--- a/docs/inference.md
++++ b/docs/inference.md
+@@ -1,6 +1,6 @@
+ # 기존 정책 추론
+ 
+-현재 `infer`는 로컬 정책을 검사한 뒤 공식 LeRobot 동기 rollout으로 실행합니다. 가루→물→젓기 자동 연결·완료 판정은 없습니다. 학습·최종 추론의 이전 대상과 기준은 [저장소 관리](repository.md#repositories)를 따릅니다.
++현재 `infer`는 로컬 정책을 검사한 뒤 공식 LeRobot 동기 rollout으로 실행합니다. 가루→물→젓기는 `--tasks`로 한 세션에서 이어 돌 수 있고, 완료 판정은 `--end-detector`가 맡습니다([여러 task 한 세션](#task-list)). 학습·최종 추론의 이전 대상과 기준은 [저장소 관리](repository.md#repositories)를 따릅니다.
+ 
+ ## 입력과 실행
+ 
+@@ -25,6 +25,26 @@ python scripts/run_robot.py infer --policy-path $policyPath --dataset-root $data
+ 
+ 100초는 예시 상한이며 작업 완료·즉시 중단을 뜻하지 않습니다. 공식 루프는 반복 경계에서 시간을 검사하므로 처리 중인 추론이 상한을 넘을 수 있습니다. 기본 상대 목표 차이 제한과 자동 복귀 없는 구성을 유지합니다. 필요할 경우의 `--no-target-limit`은 속도 제한이 아닌 목표 차이 제한을 해제하며, `--return-to-initial-position`은 Ctrl+C 후에도 복귀를 시도합니다. 복귀는 충돌 회피·물체 반납 기능이 아닙니다.
+ 
++<a id="task-list"></a>
++## 여러 task 한 세션
++
++beverage-voice가 폰 음성 주문을 이 형태로 넘깁니다. 정책 로딩·워밍업·장치 연결은 한 번이고, task마다 문장만 바꿉니다. `--tasks`는 `--task`, `--duration-s`를 대신합니다.
++
++```powershell
++$tasks = '[\"Pour coffee powder from the red-lidded container into the cup.\", \"Pour water into the cup.\", \"Stir the mixture in the cup with the muddler.\"]'
++python scripts/run_robot.py infer --policy-path $policyPath --dataset-root $datasetRoot --tasks $tasks --task-durations '[100, 75, 90]' --end-detector ../beverage-autonomy/episode_end_detector/config.json --wrist-fourcc MJPG --return-to-initial-position --validate-only
++```
++
++- Windows PowerShell 5.1은 외부 프로그램에 넘기는 인자에서 `"`를 지우므로 JSON 안의 따옴표를 `\"`로 씁니다. PowerShell 7.3 이상은 `\` 없이 씁니다. beverage-voice가 부를 때는 해당 없습니다.
++- `--end-detector`가 있으면 팔이 종료 자세에 2초 머물 때 다음 문장으로 넘어갑니다. 상한 시간 안에 판정이 없으면 다음으로 넘어가지 않고 멈춥니다. 없으면 상한 시간마다 넘어갑니다.
++- 표준 입력 한 줄로 조작합니다. `stop`은 Ctrl+C와 같은 종료 경로, `task <초> <문장>`은 지금 task를 끊고 남은 리스트를 버린 뒤 그 문장 하나만 돕니다. 표준 입력이 닫혀도 멈춥니다.
++- 진행 상황은 `BEVERAGE {json}` 줄로 표준 출력에 나옵니다. 형식은 beverage-voice `docs/protocol.md`가 기준입니다.
++- 문장이 `--dataset-root`의 `meta/tasks.parquet`에 없으면 경고합니다.
++
++## 초기 자세로 이동
++
++`python scripts/run_robot.py home [--duration-s 5] [--validate-only]`는 팔로워 두 대를 `configs/local/home.json` 자세로 선형 보간해 옮긴 뒤 연결을 끊습니다. 카메라·정책은 쓰지 않고, 보정이 맞지 않으면 보정을 시작하지 않고 멈춥니다. 자세 파일은 beverage-voice `robot_side/home.example.json`을 보정 확인 후 복사합니다.
++
+ ## 장치 연결 전 워밍업
+ 
+ 정책을 한 번 로딩한 뒤 같은 인스턴스로 검은 영상·0 상태·실행 task를 사용해 두 번 추론합니다. 행동은 버리고 매회 큐를 비웁니다. 이후 정책·전후처리 상태와 CPU/CUDA 난수 상태를 복원한 뒤 장치를 연결합니다. 워밍업 행동을 모터에 보내거나 저장하지 않습니다.
+diff --git a/docs/safety.md b/docs/safety.md
+index 8dbbc47..3780cc2 100644
+--- a/docs/safety.md
++++ b/docs/safety.md
+@@ -7,6 +7,7 @@
+ `infer`는 기본 자동 복귀 없이 공식 연결 해제를 수행합니다. `--return-to-initial-position`을 지정하면 종료·Ctrl+C 시 공식 구현이 양팔과 그리퍼를 실행 시작 관절 위치로 복귀시키려 합니다(기본 3초·50 Hz 선형 보간).
+ 이 복귀는 충돌 회피나 물체 반납 경로를 계획하지 않습니다. 복귀 이동 공간을 확보하고 그리퍼 복귀에 따른 파지 물체 낙하 가능성을 고려합니다. Ctrl+C를 즉시 모터 정지로 간주하지 않습니다.
+ 사용자 요청의 `infer --no-target-limit`은 이번 세션의 양팔 상대 목표 차이 제한을 해제합니다. 모델의 큰 목표 변화도 이 제한 없이 전달되며 기존 보정·단위·종료 토크 해제 설정은 유지됩니다.
++`home`은 정책 없이 `configs/local/home.json` 자세로 직접 목표를 보냅니다. 충돌 회피가 없고 연결 해제 시 토크가 풀리므로 파지 물체를 내려놓고 이동 공간을 확보한 뒤 실행합니다.
+ 실행 제한시간은 반복 경계에서 검사하므로 첫 추론이 제한시간을 넘겨도 목표가 전달될 수 있습니다. 시간 설정은 즉시 정지나 안전성을 보장하지 않습니다.
+ 시연 시작 자세·물체 배치와 실제 모터 추론은 별도로 확인합니다. 명령은 [추론 안내](inference.md)를 참고합니다.
+ 
+diff --git a/src/cuk_robotics/teleoperation/cli.py b/src/cuk_robotics/teleoperation/cli.py
+index e24a189..c9186ab 100644
+--- a/src/cuk_robotics/teleoperation/cli.py
++++ b/src/cuk_robotics/teleoperation/cli.py
+@@ -119,7 +119,7 @@ def main():
+     global BASE
+     parser = argparse.ArgumentParser(description=__doc__)
+     parser.add_argument("--project-root", type=Path, default=BASE)
+-    parser.add_argument("mode", choices=("operation", "practice", "record", "preview", "infer"))
++    parser.add_argument("mode", choices=("operation", "practice", "record", "preview", "infer", "home"))
+     parser.add_argument("--validate-only", action="store_true")
+     parser.add_argument("--verbose-target-warnings", action="store_true", help="Print every relative target-limit warning; default prints at most one every 30 seconds")
+     parser.add_argument("--rerun-port", type=int, help="Local viewer port; by default use 9876 or an available port if blocked")
+@@ -127,7 +127,7 @@ def main():
+     parser.add_argument("--display-fps", type=int, default=30, help="Target Rerun update rate (default 30); does not change control or recording FPS")
+     parser.add_argument("--wrist-fourcc", choices=("MJPG", "YUY2"), help="Wrist-camera USB format; practice defaults to MJPG, other camera modes use the profile; leaves configuration files unchanged")
+     parser.add_argument("--fps", type=int, help="Control/data rate; defaults to 60 for operation/practice and 30 for record")
+-    parser.add_argument("--duration-s", type=float, help="Operation/practice/infer duration; infer defaults to a 5-second trial")
++    parser.add_argument("--duration-s", type=float, help="Operation/practice/infer/home duration; infer defaults to a 5-second trial, home to 5 seconds")
+     parser.add_argument("--policy-path", type=Path, help="Local inference checkpoint directory")
+     parser.add_argument("--dataset-root", type=Path, help="Existing local dataset for record --resume or inference verification")
+     parser.add_argument("--resume", action="store_true", help="Append to the exact --repo-id and existing --dataset-root; --episodes is the additional count")
+@@ -142,6 +142,9 @@ def main():
+     parser.add_argument("--prepare-hub", action="store_true", help="Paired record only: prepare both local Hub datasets after recording, then stop without uploading")
+     parser.add_argument("--private", action="store_true", help="Use private visibility with record --push-to-hub or --prepare-hub")
+     parser.add_argument("--task")
++    parser.add_argument("--tasks", help="Infer only: JSON list of task sentences run in one session (beverage-voice protocol)")
++    parser.add_argument("--task-durations", help="With --tasks: JSON list of per-task time limits in seconds")
++    parser.add_argument("--end-detector", type=Path, help="With --tasks: beverage-autonomy episode_end_detector/config.json; ends each task at the rest pose")
+     parser.add_argument("--episodes", type=int)
+     parser.add_argument("--episode-seconds", type=float)
+     parser.add_argument("--reset-seconds", type=float)
+@@ -179,15 +182,31 @@ def main():
+         parser.error("--display-fps must be between 1 and 60.")
+     if options.fps is not None and not 1 <= options.fps <= 120:
+         parser.error("--fps must be between 1 and 120.")
+-    if options.duration_s is not None and (options.mode not in ("operation", "practice", "infer") or not math.isfinite(options.duration_s) or options.duration_s <= 0):
+-        parser.error("--duration-s must be finite and positive and is only available for operation/practice/infer.")
++    if options.duration_s is not None and (options.mode not in ("operation", "practice", "infer", "home") or not math.isfinite(options.duration_s) or options.duration_s <= 0):
++        parser.error("--duration-s must be finite and positive and is only available for operation/practice/infer/home.")
+     if options.mode == "operation":
+         if options.wrist_fourcc is not None:
+             parser.error("operation does not use cameras; --wrist-fourcc is unavailable.")
+         if any(v is not None for v in (options.repo_id, options.task, options.episodes, options.episode_seconds, options.reset_seconds)):
+             parser.error("operation does not support dataset recording options.")
++    options.task_plan = None
++    if (options.tasks is not None or options.task_durations is not None) and options.mode != "infer":
++        parser.error("--tasks and --task-durations are only available for infer.")
++    if options.end_detector is not None and options.tasks is None:
++        parser.error("--end-detector requires --tasks.")
++    if options.tasks is not None:
++        if options.task is not None or options.duration_s is not None:
++            parser.error("--tasks replaces --task and --duration-s; give per-task limits with --task-durations.")
++        if options.task_durations is None:
++            parser.error("--tasks requires --task-durations.")
++        from cuk_robotics.teleoperation.task_list import parse_plan
++        try:
++            options.task_plan = parse_plan(options.tasks, options.task_durations)
++        except ValueError as error:
++            parser.error(str(error))
++        options.task = options.task_plan[0][0]
+     if options.mode == "infer" and (options.policy_path is None or options.dataset_root is None or not options.task or not options.task.strip()):
+-        parser.error("infer requires --policy-path, --dataset-root and --task.")
++        parser.error("infer requires --policy-path, --dataset-root and --task (or --tasks).")
+     if options.mode == "infer" and any(v is not None for v in (options.repo_id, options.episodes, options.episode_seconds, options.reset_seconds)):
+         parser.error("infer uses base rollout without dataset recording options.")
+     if options.no_target_limit and options.mode != "infer":
+@@ -202,6 +221,10 @@ def main():
+         print(f"Wrist camera USB format override: {options.wrist_fourcc}. Configuration files are unchanged; Rerun still receives raw images.", flush=True)
+         if options.mode == "record" and options.wrist_fourcc == "MJPG":
+             print("Recording uses decoded MJPG camera images. USB input compression is lossy; check object and tool detail before collecting demonstrations.", flush=True)
++    if options.mode == "home":
++        from cuk_robotics.teleoperation.home import run_home
++        run_home(options, hardware_args(include_cameras=False), BASE / "configs" / "local" / "home.json")
++        return
+     if options.mode != "operation":
+         build = install_camera_layout()
+         from cuk_robotics.teleoperation.rerun_display import install_display_logging
+diff --git a/src/cuk_robotics/teleoperation/home.py b/src/cuk_robotics/teleoperation/home.py
+new file mode 100644
+index 0000000..cb68023
+--- /dev/null
++++ b/src/cuk_robotics/teleoperation/home.py
+@@ -0,0 +1,63 @@
++"""home: move both followers to configs/local/home.json, then disconnect. No cameras, no policy.
++
++The pose file holds joint names and values in infer units (degrees, grippers 0-100). The move is the same
++linear interpolation LeRobot uses for return_to_initial_position; it has no collision avoidance.
++"""
++import json
++from pathlib import Path
++import signal
++import sys
++import time
++
++
++def read_pose(path):
++    pose = json.loads(Path(path).read_text(encoding="utf-8"))
++    names, values = pose["joint_names"], pose["home"]
++    if len(names) != len(values) or len(set(names)) != len(names):
++        raise ValueError(f"{path}: joint_names and home must be the same length without duplicates.")
++    return {name: float(value) for name, value in zip(names, values)}
++
++
++def move_to(robot, target, duration_s, fps=50, sleep=time.sleep):
++    start = {key: float(robot.get_observation()[key]) for key in target}
++    steps = max(int(duration_s * fps), 1)
++    for step in range(1, steps + 1):
++        t = step / steps
++        robot.send_action({key: start[key] + (target[key] - start[key]) * t for key in target})  # max_relative_target clips each tick.
++        sleep(1 / fps)
++
++
++def run_home(options, hardware_arguments, pose_path):
++    from dataclasses import dataclass
++
++    import draccus
++    from lerobot.robots import RobotConfig, bi_so_follower, make_robot_from_config  # noqa: F401 registers --robot.type=bi_so_follower
++    from lerobot.utils.robot_utils import precise_sleep
++
++    @dataclass
++    class HomeConfig:
++        robot: RobotConfig
++
++    if not Path(pose_path).is_file():
++        raise FileNotFoundError(f"Create {pose_path} from beverage-voice robot_side/home.example.json after checking calibration.")
++    target = read_pose(pose_path)
++    robot_args = [a for a in hardware_arguments if a.startswith("--robot.")]
++    robot = make_robot_from_config(draccus.parse(config_class=HomeConfig, args=robot_args).robot)
++    joints = [key for key in robot.action_features if key.endswith(".pos")]
++    if set(target) != set(joints):
++        raise ValueError(f"{pose_path} joint names differ from the robot: {sorted(set(target) ^ set(joints))}")
++    duration_s = options.duration_s or 5.0
++    print(f"Home pose: {pose_path}; {len(target)} joints over {duration_s:g}s.", flush=True)
++    if options.validate_only:
++        print("Validated home pose and robot configuration. No hardware connected.", flush=True)
++        return
++    if sys.platform == "win32":  # beverage-voice stops home with CTRL_BREAK; raise KeyboardInterrupt so disconnect still runs.
++        signal.signal(signal.SIGBREAK, signal.default_int_handler)
++    robot.connect(calibrate=False)  # Never start interactive calibration from a remote button.
++    try:
++        if not robot.is_calibrated:
++            raise RuntimeError("Motor calibration differs from the calibration files; calibrate with operation first.")
++        move_to(robot, target, duration_s, sleep=precise_sleep)
++        print("Home pose reached; disconnecting (torque off).", flush=True)
++    finally:
++        robot.disconnect()
+diff --git a/src/cuk_robotics/teleoperation/inference.py b/src/cuk_robotics/teleoperation/inference.py
+index 3e1dee6..fdfdd07 100644
+--- a/src/cuk_robotics/teleoperation/inference.py
++++ b/src/cuk_robotics/teleoperation/inference.py
+@@ -1,6 +1,8 @@
+ """Validate local policy/hardware contracts and delegate motion to LeRobot rollout."""
++from contextlib import nullcontext
+ import json
+ from pathlib import Path
++import signal
+ import sys
+ 
+ 
+@@ -71,13 +73,15 @@ def run_inference(options, hardware_arguments):
+     from lerobot.scripts import lerobot_rollout as official
+ 
+     path, policy, schema, rename_map = read_checkpoint_contract(options.policy_path, options.dataset_root)
++    plan = getattr(options, "task_plan", None)
++    duration = sum(seconds for _, seconds in plan) if plan else options.duration_s or 5
+     fps = options.fps if options.fps is not None else schema["fps"]
+     args = inference_hardware_args(hardware_arguments, no_target_limit=options.no_target_limit)
+     args.extend([
+         "--strategy.type=base", "--inference.type=sync",
+         f"--policy.path={path}", f"--policy.device={options.device}",
+         f"--device={options.device}", f"--task={options.task}",
+-        f"--fps={fps}", f"--duration={options.duration_s or 5}",
++        f"--fps={fps}", f"--duration={duration}",
+         f"--return_to_initial_position={str(options.return_to_initial_position).lower()}", "--play_sounds=false",
+         "--use_torch_compile=false", "--rename_map=" + json.dumps(rename_map),
+     ])
+@@ -98,6 +102,15 @@ def run_inference(options, hardware_arguments):
+         print(f"Rate: {fps} FPS; duration: {config.duration}s; no recording/upload.", flush=True)
+         print(f"Return to startup joint positions before disconnect: {config.return_to_initial_position} (includes grippers and Ctrl+C teardown).", flush=True)
+         print("Target difference limits:", {side: getattr(config.robot, f"{side}_arm_config").max_relative_target for side in ("left", "right")}, flush=True)
++        detector = None
++        if plan:
++            from cuk_robotics.teleoperation.task_list import load_detector, task_list_strategy, unknown_tasks
++            detector = load_detector(options.end_detector) if options.end_detector else None
++            for index, (sentence, seconds) in enumerate(plan, 1):
++                print(f"Task {index}/{len(plan)}: {sentence} (limit {seconds:g}s)", flush=True)
++            print(f"End detector: {options.end_detector or 'none; each task runs until its limit'}", flush=True)
++            if missing := unknown_tasks(plan, options.dataset_root):
++                print(f"WARNING: not in {options.dataset_root}/meta/tasks.parquet: {missing}", flush=True)
+         if options.validate_only:
+             print("Validated official rollout configuration and source feature contract. No hardware connected; weights not loaded.")
+             return
+@@ -107,9 +120,11 @@ def run_inference(options, hardware_arguments):
+         from lerobot.rollout import context
+         from cuk_robotics.teleoperation.inference_warmup import rollout_warmup, warm_policy
+ 
++        if sys.platform == "win32":  # beverage-voice stops a single-task infer with CTRL_BREAK; take the Ctrl+C teardown path.
++            signal.signal(signal.SIGBREAK, signal.default_int_handler)
+         with rollout_warmup(official, context, lambda loaded: warm_policy(
+             loaded, path, schema, rename_map, config.task, config.device,
+-        )):
++        )), task_list_strategy(official, plan, detector) if plan else nullcontext():
+             official.main()
+     finally:
+         sys.argv = previous_argv
+diff --git a/src/cuk_robotics/teleoperation/task_list.py b/src/cuk_robotics/teleoperation/task_list.py
+new file mode 100644
+index 0000000..e4e4d34
+--- /dev/null
++++ b/src/cuk_robotics/teleoperation/task_list.py
+@@ -0,0 +1,169 @@
++"""infer --tasks: load the policy and connect hardware once, then run task sentences in order.
++
++beverage-voice launches infer this way. Its docs/protocol.md defines the contract: stdin commands
++(`stop`, `task <seconds> <sentence>`) and stdout lines starting with `BEVERAGE `. The per-task loop is
++LeRobot 0.6.1's base strategy loop with three extra exits: end detector, duration and manual preemption.
++"""
++from contextlib import contextmanager
++import json
++import math
++from pathlib import Path
++import queue
++import sys
++import threading
++import time
++
++from lerobot.rollout.strategies.base import BaseStrategy
++from lerobot.rollout.strategies.core import send_next_action
++from lerobot.utils.robot_utils import precise_sleep
++
++EVENT_PREFIX = "BEVERAGE "
++
++
++def emit(event, **fields):
++    print(EVENT_PREFIX + json.dumps({"event": event, **fields}, ensure_ascii=False), flush=True)
++
++
++def parse_plan(tasks, durations):
++    """--tasks / --task-durations JSON lists -> [(sentence, seconds)]."""
++    tasks, durations = json.loads(tasks), json.loads(durations)
++    if not isinstance(tasks, list) or not tasks or any(not isinstance(t, str) or not t.strip() for t in tasks):
++        raise ValueError("--tasks must be a nonempty JSON list of task sentences.")
++    if (not isinstance(durations, list) or len(durations) != len(tasks)
++            or any(isinstance(d, bool) or not isinstance(d, (int, float)) or not math.isfinite(d) or d <= 0 for d in durations)):
++        raise ValueError("--task-durations must be a JSON list with one positive number per task.")
++    return [(t.strip(), float(d)) for t, d in zip(tasks, durations)]
++
++
++def load_detector(config_path):
++    """EpisodeEndDetector from a beverage-autonomy episode_end_detector/config.json."""
++    config_path = Path(config_path).resolve()
++    try:
++        from episode_end_detector import EpisodeEndDetector
++    except ImportError:
++        sys.path.insert(0, str(config_path.parents[1]))  # the beverage-autonomy checkout holding the package
++        from episode_end_detector import EpisodeEndDetector
++    return EpisodeEndDetector.load_config(config_path)
++
++
++def unknown_tasks(plan, dataset_root):
++    """Sentences missing from the dataset's meta/tasks.parquet; the policy never saw them."""
++    path = Path(dataset_root) / "meta" / "tasks.parquet"
++    if not path.is_file():
++        return []
++    import pandas as pd
++    known = set(pd.read_parquet(path).index)
++    return [task for task, _ in plan if task not in known]
++
++
++class TaskListStrategy(BaseStrategy):
++    """Runs a task list; a manual `task` command drops the rest of the list and runs only that sentence."""
++
++    def __init__(self, config, plan, detector=None, commands=None):
++        super().__init__(config)
++        self.plan = list(plan)
++        self.detector = detector
++        self.commands = sys.stdin if commands is None else commands
++        self._manual = queue.Queue()
++
++    def setup(self, ctx):
++        super().setup(ctx)
++        if not hasattr(self._engine, "_task"):
++            raise RuntimeError("task_list switches sentences through SyncInferenceEngine._task; use --inference.type=sync.")
++        threading.Thread(target=self._read_commands, args=(ctx.runtime.shutdown_event,), daemon=True).start()
++
++    def _read_commands(self, shutdown_event):
++        for line in self.commands:
++            command = line.strip()
++            if command == "stop":
++                shutdown_event.set()  # Same exit as Ctrl+C: teardown returns to the start pose and disconnects.
++            elif command.startswith("task "):
++                seconds, _, task = command[5:].partition(" ")
++                try:
++                    seconds = float(seconds)
++                except ValueError:
++                    seconds = 0.0
++                if task.strip() and math.isfinite(seconds) and seconds > 0:
++                    self._manual.put((task.strip(), seconds))
++                    continue
++                print(f"Ignored command: {command}", file=sys.stderr, flush=True)
++            elif command:
++                print(f"Ignored command: {command}", file=sys.stderr, flush=True)
++        shutdown_event.set()  # The parent closed stdin, so nobody can stop this session any more.
++
++    def _take_manual(self):
++        manual = None
++        while True:
++            try:
++                manual = self._manual.get_nowait()  # Keep only the latest press.
++            except queue.Empty:
++                return manual
++
++    def run(self, ctx):
++        cfg, shutdown = ctx.runtime.cfg, ctx.runtime.shutdown_event
++        plan, source, index, total = list(self.plan), "list", 0, len(self.plan)
++        outcome = "complete"
++        emit("ready")
++        while not shutdown.is_set():
++            manual = self._take_manual()
++            if manual is not None:
++                if index and cfg.return_to_initial_position and ctx.hardware.initial_position:
++                    self._return_to_initial_position(ctx.hardware)  # 3 s linear move, no collision avoidance.
++                plan, source, index, total = [manual], "manual", 0, 1
++            if not plan:
++                break
++            task, seconds = plan.pop(0)
++            index += 1
++            emit("task_start", index=index, total=total, task=task, source=source)
++            started = time.perf_counter()
++            reason = self._run_task(ctx, task, seconds)
++            emit("task_end", index=index, reason=reason, seconds=round(time.perf_counter() - started, 1))
++            if reason == "duration" and self.detector is not None:
++                outcome = "timeout"  # The arm never reached the end pose; a person decides what happens next.
++                break
++        if shutdown.is_set():
++            outcome = "stop"
++        emit("done", reason=outcome)
++
++    def _run_task(self, ctx, task, seconds):
++        cfg, robot, shutdown = ctx.runtime.cfg, ctx.hardware.robot_wrapper, ctx.runtime.shutdown_event
++        engine, interpolator = self._engine, self._interpolator
++        control_interval = interpolator.get_control_interval(cfg.fps)
++        engine._task = task  # Applied to every observation from the next tick.
++        engine.reset()  # Drop the action chunk queued for the previous sentence.
++        interpolator.reset()
++        self._cached_obs_processed = None
++        engine.resume()
++        if self.detector is not None:
++            self.detector.start_episode([task])
++        started = time.perf_counter()
++        while not shutdown.is_set():
++            loop_start = time.perf_counter()
++            if not self._manual.empty():
++                return "preempted"
++            if loop_start - started >= seconds:
++                return "duration"
++            obs = robot.get_observation()
++            if self.detector is not None:
++                state = [obs[name] for name in self.detector.names]
++                if self.detector.update(state, timestamp=loop_start)["event"] == "episode_end":
++                    return "detector"
++            obs_processed = self._process_observation_and_notify(ctx.processors, obs)
++            if self._handle_warmup(cfg.use_torch_compile, loop_start, control_interval):
++                continue
++            action = send_next_action(obs_processed, obs, ctx, interpolator)
++            self._log_telemetry(obs_processed, action, ctx.runtime)
++            if (sleep_t := control_interval - (time.perf_counter() - loop_start)) > 0:
++                precise_sleep(sleep_t)
++        return "stop"
++
++
++@contextmanager
++def task_list_strategy(official, plan, detector=None):
++    """Make lerobot_rollout build TaskListStrategy; the config keeps --strategy.type=base."""
++    original = official.create_strategy
++    official.create_strategy = lambda config: TaskListStrategy(config, plan, detector)
++    try:
++        yield
++    finally:
++        official.create_strategy = original
+diff --git a/tests/test_task_list.py b/tests/test_task_list.py
+new file mode 100644
+index 0000000..d7c5325
+--- /dev/null
++++ b/tests/test_task_list.py
+@@ -0,0 +1,194 @@
++"""infer --tasks and home without hardware: event lines, sentence switching, preemption, stop, limits."""
++import contextlib
++import importlib.util
++import io
++import json
++from pathlib import Path
++import queue
++import sys
++from threading import Event
++from types import SimpleNamespace as NS
++import unittest
++
++ROOT = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT / "src"))
++HAS_ROLLOUT = importlib.util.find_spec("lerobot") is not None and importlib.util.find_spec("lerobot.rollout") is not None
++JOINTS = [f"{side}_{joint}.pos" for side in ("left", "right")
++          for joint in ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper")]
++TASKS = ["Pour coffee powder from the red-lidded container into the cup.", "Pour water into the cup.",
++         "Stir the mixture in the cup with the muddler."]
++
++
++class Commands:
++    """Blocking stdin stand-in; None closes it."""
++
++    def __init__(self):
++        self.lines = queue.Queue()
++
++    def __iter__(self):
++        while (line := self.lines.get()) is not None:
++            yield line + "\n"
++
++
++class Engine:
++    ready = True
++
++    def __init__(self):
++        self._task, self.tasks_seen, self.resets = "first", [], 0
++
++    def reset(self):
++        self.resets += 1
++
++    def start(self):
++        pass
++
++    def stop(self):
++        pass
++
++    def resume(self):
++        self.tasks_seen.append(self._task)
++
++    def notify_observation(self, observation):
++        pass
++
++
++class Robot:
++    def __init__(self, on_observation=None):
++        self.pose = {joint: 0.0 for joint in JOINTS}
++        self.sent, self.reads, self.on_observation = [], 0, on_observation
++
++    def get_observation(self):
++        self.reads += 1
++        if self.on_observation:
++            self.on_observation(self.reads)
++        return dict(self.pose)
++
++    def send_action(self, action):
++        self.sent.append(action)
++        self.pose.update(action)
++        return action
++
++
++class Detector:
++    """Ends a task after `ticks` updates; ticks=None never ends."""
++
++    names = JOINTS
++
++    def __init__(self, ticks):
++        self.ticks, self.count = ticks, 0
++
++    def start_episode(self, instructions):
++        self.count = 0
++
++    def update(self, state, timestamp=None):
++        assert len(state) == 12
++        self.count += 1
++        return {"event": "episode_end" if self.ticks and self.count >= self.ticks else None}
++
++
++@unittest.skipUnless(HAS_ROLLOUT, "needs lerobot 0.6.1 rollout")
++class TaskListTests(unittest.TestCase):
++    def setUp(self):
++        from cuk_robotics.teleoperation import task_list
++        self.module = task_list
++        self.sent_tasks = []
++        original = task_list.send_next_action
++        task_list.send_next_action = lambda obs_processed, obs, ctx, interpolator: self.sent_tasks.append(ctx.policy.inference._task)
++        self.addCleanup(setattr, task_list, "send_next_action", original)
++
++    def run_strategy(self, plan, detector=None, robot=None, before=(), return_home=True):
++        commands, engine, robot = Commands(), Engine(), robot or Robot()
++        for line in before:
++            commands.lines.put(line)
++        ctx = NS(
++            runtime=NS(cfg=NS(fps=200, interpolation_multiplier=1, use_torch_compile=False, display_data=False,
++                              return_to_initial_position=return_home), shutdown_event=Event()),
++            policy=NS(inference=engine), processors=NS(robot_observation_processor=lambda obs: obs),
++            hardware=NS(robot_wrapper=robot, initial_position={joint: 1.0 for joint in JOINTS}),
++        )
++        strategy = self.module.TaskListStrategy(NS(), plan, detector, commands)
++        self.commands = commands
++        out = io.StringIO()
++        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
++            strategy.setup(ctx)
++            strategy.run(ctx)
++        commands.lines.put(None)
++        events = [json.loads(line[len("BEVERAGE "):]) for line in out.getvalue().splitlines() if line.startswith("BEVERAGE ")]
++        return events, engine, robot
++
++    def test_detector_moves_through_the_list_with_one_engine(self):
++        events, engine, _ = self.run_strategy([(task, 30.0) for task in TASKS], Detector(ticks=3))
++        self.assertEqual([e["event"] for e in events], ["ready"] + ["task_start", "task_end"] * 3 + ["done"])
++        self.assertEqual([e["reason"] for e in events if e["event"] == "task_end"], ["detector"] * 3)
++        self.assertEqual(events[-1]["reason"], "complete")
++        self.assertEqual(engine.tasks_seen, TASKS)
++        self.assertEqual(self.sent_tasks, [TASKS[0]] * 2 + [TASKS[1]] * 2 + [TASKS[2]] * 2)
++        self.assertGreaterEqual(engine.resets, 4)  # setup plus one per sentence
++
++    def test_manual_command_drops_the_list_and_runs_only_that_task(self):
++        robot = Robot(on_observation=lambda reads: reads == 5 and self.commands.lines.put(f"task 30 {TASKS[1]}"))
++        events, engine, robot = self.run_strategy([(TASKS[0], 30.0), (TASKS[2], 30.0)], Detector(ticks=40), robot)
++        ends = [e for e in events if e["event"] == "task_end"]
++        starts = [e for e in events if e["event"] == "task_start"]
++        self.assertEqual([e["reason"] for e in ends], ["preempted", "detector"])
++        self.assertEqual([(e["task"], e["source"], e["total"]) for e in starts],
++                         [(TASKS[0], "list", 2), (TASKS[1], "manual", 1)])
++        self.assertEqual(engine.tasks_seen, [TASKS[0], TASKS[1]])
++        self.assertEqual(events[-1]["reason"], "complete")
++        self.assertIn({joint: 1.0 for joint in JOINTS}, robot.sent)  # returned to the start pose before the manual task
++
++    def test_stop_command_ends_the_session(self):
++        robot = Robot(on_observation=lambda reads: reads == 3 and self.commands.lines.put("stop"))
++        events, engine, _ = self.run_strategy([(task, 30.0) for task in TASKS], Detector(ticks=None), robot)
++        self.assertEqual([e["reason"] for e in events if e["event"] == "task_end"], ["stop"])
++        self.assertEqual(events[-1], {"event": "done", "reason": "stop"})
++
++    def test_limit_with_detector_stops_but_without_detector_moves_on(self):
++        events, _, _ = self.run_strategy([(TASKS[0], 0.05), (TASKS[1], 0.05)], Detector(ticks=None))
++        self.assertEqual([e["reason"] for e in events if e["event"] == "task_end"], ["duration"])
++        self.assertEqual(events[-1]["reason"], "timeout")
++        events, _, _ = self.run_strategy([(TASKS[0], 0.05), (TASKS[1], 0.05)], None)
++        self.assertEqual([e["reason"] for e in events if e["event"] == "task_end"], ["duration", "duration"])
++        self.assertEqual(events[-1]["reason"], "complete")
++
++    def test_closed_stdin_stops_and_bad_commands_are_ignored(self):
++        robot = Robot(on_observation=lambda reads: reads == 3 and [self.commands.lines.put(line) for line in ("task x y", "jump", None)])
++        events, _, _ = self.run_strategy([(TASKS[0], 30.0)], Detector(ticks=None), robot)
++        self.assertEqual(events[-1]["reason"], "stop")
++
++    def test_parse_plan(self):
++        parse = self.module.parse_plan
++        self.assertEqual(parse(json.dumps(TASKS[:2]), "[100, 75.5]"), [(TASKS[0], 100.0), (TASKS[1], 75.5)])
++        for tasks, durations in (("[]", "[]"), ('["a"]', "[1, 2]"), ('["a"]', "[0]"), ('["a"]', "[true]"),
++                                 ('[" "]', "[1]"), ("not json", "[1]"), ('"a"', "[1]")):
++            with self.subTest(tasks=tasks, durations=durations), self.assertRaises(ValueError):
++                parse(tasks, durations)
++
++
++class HomeTests(unittest.TestCase):
++    def setUp(self):
++        spec = importlib.util.spec_from_file_location("home", ROOT / "src/cuk_robotics/teleoperation/home.py")
++        self.module = importlib.util.module_from_spec(spec)
++        spec.loader.exec_module(self.module)
++
++    def test_moves_linearly_to_the_pose(self):
++        robot = Robot()
++        target = {joint: 10.0 for joint in JOINTS}
++        self.module.move_to(robot, target, duration_s=0.1, fps=50, sleep=lambda s: None)
++        self.assertEqual(len(robot.sent), 5)
++        self.assertEqual(robot.sent[0][JOINTS[0]], 2.0)
++        self.assertEqual(robot.pose, target)
++
++    def test_pose_file_must_pair_names_and_values(self):
++        import tempfile
++        with tempfile.TemporaryDirectory() as directory:
++            path = Path(directory) / "home.json"
++            path.write_text(json.dumps({"joint_names": JOINTS, "home": list(range(12))}), encoding="utf-8")
++            self.assertEqual(self.module.read_pose(path)[JOINTS[11]], 11.0)
++            path.write_text(json.dumps({"joint_names": JOINTS, "home": [0] * 11}), encoding="utf-8")
++            with self.assertRaises(ValueError):
++                self.module.read_pose(path)
++
++
++if __name__ == "__main__":
++    unittest.main()
