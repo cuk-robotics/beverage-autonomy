@@ -1,0 +1,9 @@
+{
+  "urls": [
+    "https://huggingface.co/datasets/lmsforAI/so101_stir_merged50_20261031_masked",
+    "https://huggingface.co/datasets/lmsforAI/so101_water_v2_merged54_20261020",
+    "https://huggingface.co/datasets/lmsforAI/so101_powder_greentea_v2_merged35_20261019",
+    "https://huggingface.co/datasets/lmsforAI/so101_powder_icetea_v2_merged35_20261019",
+    "https://huggingface.co/datasets/lmsforAI/so101_powder_coffee_v2_merged35_20261019"
+  ]
+}

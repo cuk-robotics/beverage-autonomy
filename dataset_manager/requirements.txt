@@ -1,0 +1,6 @@
+lerobot[dataset]==0.6.1
+huggingface-hub
+numpy
+pandas
+pyarrow
+filelock
